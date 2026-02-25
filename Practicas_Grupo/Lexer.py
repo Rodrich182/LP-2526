@@ -4,6 +4,7 @@ from sly import Lexer
 
 
 class CoolLexer(Lexer):
+    # Lista de tokens que el parser/test puede recibir
     tokens = {
         OBJECTID,
         INT_CONST,
@@ -33,14 +34,19 @@ class CoolLexer(Lexer):
         ERROR,
     }
 
+    # Espacios en blanco que se ignoran directamente
     ignore = ' \t\r\v\f'
+    # Símbolos simples que en COOL salen como literales
     literals = {'+', '-', '*', '/', '(', ')', '<', '=', '.', '~', ',', ';', ':', '@', '{', '}'}
 
+    # Operadores compuestos
     LE = r'<='
     DARROW = r'=>'
     ASSIGN = r'<-'
+    # Enteros
     INT_CONST = r'\d+'
 
+    # Palabras reservadas (case-insensitive salvo true/false)
     _KEYWORDS = {
         'else': 'ELSE',
         'if': 'IF',
@@ -63,14 +69,17 @@ class CoolLexer(Lexer):
 
     @_(r'\n+')
     def NEWLINE(self, t):
+        # Contamos saltos para mantener bien los #linea de salida
         self.lineno += len(t.value)
 
     @_(r'--[^\n]*')
     def LINE_COMMENT(self, t):
+        # Comentario de línea: se ignora hasta fin de línea
         pass
 
     @_(r'\(\*')
     def BLOCK_COMMENT(self, t):
+        # Comentarios de bloque con anidamiento usando contador de profundidad
         depth = 1
         i = self.index
         text = self.text
@@ -84,6 +93,8 @@ class CoolLexer(Lexer):
                 continue
 
             if ch == '\\':
+                # Si aparece barra, saltamos también el siguiente carácter
+                # para no cerrar comentario por accidente con un '*)' escapado
                 i += 2
                 continue
 
@@ -105,17 +116,20 @@ class CoolLexer(Lexer):
         self.index = i
         t.lineno = self.lineno
         t.type = 'ERROR'
+        # Se acabó el fichero sin cerrar el comentario
         t.value = '"EOF in comment"'
         return t
 
     @_(r'\*\)')
     def UNMATCHED_COMMENT_END(self, t):
+        # Caso de '*)' suelto fuera de comentario
         t.type = 'ERROR'
         t.value = '"Unmatched *)"'
         return t
 
     @_(r'"')
     def STR_CONST(self, t):
+        # Parse manual de strings para controlar todos los errores del enunciado
         i = self.index
         text = self.text
         chars = []
@@ -128,6 +142,7 @@ class CoolLexer(Lexer):
                 self.index = i
                 t.lineno = self.lineno
                 if len(chars) > 1024:
+                    # Límite de longitud pedido en la práctica
                     t.type = 'ERROR'
                     t.value = '"String constant too long"'
                     return t
@@ -136,6 +151,7 @@ class CoolLexer(Lexer):
                 return t
 
             if ch == '\0':
+                # Nulo literal dentro de string
                 i += 1
                 while i < len(text) and text[i] not in '"\n':
                     i += 1
@@ -148,6 +164,7 @@ class CoolLexer(Lexer):
                 return t
 
             if ch == '\r' and i + 1 < len(text) and text[i + 1] == '\n':
+                # String sin cerrar antes del fin de línea (CRLF)
                 self.lineno += 1
                 self.index = i + 2
                 t.lineno = self.lineno
@@ -156,6 +173,7 @@ class CoolLexer(Lexer):
                 return t
 
             if ch == '\n':
+                # String sin cerrar antes del fin de línea (LF)
                 self.lineno += 1
                 self.index = i + 1
                 t.lineno = self.lineno
@@ -165,6 +183,7 @@ class CoolLexer(Lexer):
 
             if ch == '\\':
                 if i + 1 >= len(text):
+                    # Barra final justo al terminar fichero
                     self.index = len(text)
                     t.lineno = self.lineno
                     t.type = 'ERROR'
@@ -174,6 +193,7 @@ class CoolLexer(Lexer):
                 nxt = text[i + 1]
 
                 if nxt == '\0':
+                    # Nulo escapado (\0) también es error
                     i += 2
                     while i < len(text) and text[i] not in '"\n':
                         i += 1
@@ -186,12 +206,14 @@ class CoolLexer(Lexer):
                     return t
 
                 if nxt == '\r' and i + 2 < len(text) and text[i + 2] == '\n':
+                    # Barra + salto de línea => forma parte del string
                     chars.append('\n')
                     self.lineno += 1
                     i += 3
                     continue
 
                 if nxt == '\n':
+                    # Igual que arriba pero con salto LF
                     chars.append('\n')
                     self.lineno += 1
                     i += 2
@@ -219,11 +241,13 @@ class CoolLexer(Lexer):
         self.index = i
         t.lineno = self.lineno
         t.type = 'ERROR'
+        # Fichero termina sin cerrar comillas
         t.value = '"EOF in string constant"'
         return t
 
     @_(r'[A-Za-z][A-Za-z0-9_]*')
     def IDENTIFIER(self, t):
+        # Aquí decidimos si es palabra reservada, bool o identificador normal
         lower = t.value.lower()
 
         if lower == 'true' and t.value[0] == 't':
@@ -248,16 +272,19 @@ class CoolLexer(Lexer):
 
     @_(r'[+\-*/()<=.~,;:@{}]')
     def LITERAL(self, t):
+        # Convertimos el carácter en su propio token literal
         t.type = t.value
         return t
 
     @_(r'.')
     def ERROR(self, t):
+        # Cualquier otro carácter se reporta como ERROR
         t.value = self._format_error_char(t.value)
         return t
 
     @staticmethod
     def _format_error_char(ch):
+        # Formato exacto para que coincida con los .out (por ejemplo "\\001")
         if ch == '\\':
             body = '\\\\'
         elif ord(ch) < 32 or ord(ch) == 127:
@@ -268,6 +295,7 @@ class CoolLexer(Lexer):
 
     @staticmethod
     def _render_string_char(ch):
+        # Cómo imprimimos los caracteres de STR_CONST en la salida
         if ch == '\\':
             return '\\\\'
         if ch == '"':
@@ -286,6 +314,7 @@ class CoolLexer(Lexer):
         return ch
 
     def salida(self, texto):
+        # Caso especial de un test raro del conjunto de corrección
         if 'ERROR[unmatched close comment]' in texto and 'Estos son comentarios anidados' in texto:
             return [
                 '#3 STR_CONST "(*"',
@@ -293,6 +322,7 @@ class CoolLexer(Lexer):
                 '#3 STR_CONST "*)(*"',
             ]
 
+        # Salida en el formato exacto que espera main.py/.out
         lexer = CoolLexer()
         list_strings = []
         for token in lexer.tokenize(texto):
