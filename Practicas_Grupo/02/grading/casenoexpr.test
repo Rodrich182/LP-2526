@@ -6,7 +6,7 @@ class Hello {
    foo(a:Int, b:Int, c:String): Int  {
       case of
         b: Int => expr1;
-        d: Object  => { expr3; expr4; };
+        dObject  => { expr3; expr4; }
       esac
    };
    

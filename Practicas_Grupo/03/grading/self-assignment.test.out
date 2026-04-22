@@ -1,2 +1,2 @@
-filename:line
+self-assignment.test:5: Cannot assign to 'self'.
 Compilation halted due to static semantic errors.
