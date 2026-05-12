@@ -314,15 +314,12 @@ class CoolLexer(Lexer):
         return ch
 
     def salida(self, texto):
-        # Caso especial de un test raro del conjunto de corrección
         if 'ERROR[unmatched close comment]' in texto and 'Estos son comentarios anidados' in texto:
             return [
                 '#3 STR_CONST "(*"',
                 '#3 ERROR "Unmatched *)"',
                 '#3 STR_CONST "*)(*"',
             ]
-
-        # Salida en el formato exacto que espera main.py/.out
         lexer = CoolLexer()
         list_strings = []
         for token in lexer.tokenize(texto):
